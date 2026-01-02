@@ -176,40 +176,32 @@ unbrick_mode() {
     read -p "Enter firmware folder path: " FW
     [ ! -d "$FW" ] && {
         printf "${RED}[✘] Invalid firmware path${RESET}\n"
-        sleep 1.0
-        clear
-        return
+       sleep 1.0
+      clear
+     return
     }
 
     cd "$FW" || return
-    draw_box "ONE CLICK UNBRICK"
+    draw_box "UNBRICK (DYNAMIC PARTITION)"
 
-    # ---------- detect images ----------
-    IMG_FOUND=0
+    # ---------- sanity check ----------
+    shopt -s nullglob
+    super_chunks=(super.img_sparsechunk.*)
+    shopt -u nullglob
 
-    for f in *.img *.img_sparsechunk.*; do
-        [ -f "$f" ] && IMG_FOUND=1 && break
-    done
-
-    if [ "$IMG_FOUND" -eq 0 ]; then
-        printf "${RED}[✘] No firmware .img files found in folder${RESET}\n"
-        printf "${YELLOW}[!] Please select correct firmware directory${RESET}\n"
-        printf "${YELLOW}[!] Example: boot.img, system.img_sparsechunk.*${RESET}\n"
-       sleep 1.0
-        clear
+    if [ ${#super_chunks[@]} -eq 0 ]; then
+        printf "${RED}[✘] super.img_sparsechunk files not found${RESET}\n"
+        printf "${YELLOW}[!] This is not a dynamic-partition firmware${RESET}\n"
+      sleep 1.0
+       clear
        return
     fi
 
-    # ---------- flash critical partitions ----------
-    for part in boot dtbo vbmeta recovery; do
+    # ---------- critical partitions ----------
+    for part in boot vendor_boot dtbo vbmeta vbmeta_system; do
         shopt -s nullglob
         imgs=($part.img*)
         shopt -u nullglob
-
-        if [ ${#imgs[@]} -eq 0 ]; then
-            printf "${YELLOW}[!] %s image not found, skipping${RESET}\n" "$part"
-            continue
-        fi
 
         for img in "${imgs[@]}"; do
             printf "${BLUE}[•] Flashing %s${RESET}\n" "$img"
@@ -217,28 +209,12 @@ unbrick_mode() {
         done
     done
 
-    # ---------- flash sparsechunks ----------
-    shopt -s nullglob
-    system_chunks=(system.img_sparsechunk.*)
-    vendor_chunks=(vendor.img_sparsechunk.*)
-    shopt -u nullglob
+    # ---------- flash super sparsechunks ----------
+    printf "${GREEN}[✔] Flashing super.img sparsechunks${RESET}\n"
 
-    if [ ${#system_chunks[@]} -eq 0 ] && [ ${#vendor_chunks[@]} -eq 0 ]; then
-        printf "${RED}[✘] No system/vendor sparsechunks found${RESET}\n"
-        printf "${YELLOW}[!] Incomplete firmware package${RESET}\n"
-         sleep 1.0
-         clear
-         return
-    fi
-
-    for chunk in "${system_chunks[@]}"; do
+    for chunk in "${super_chunks[@]}"; do
         printf "${BLUE}[•] Flashing %s${RESET}\n" "$chunk"
-        termux-fastboot flash system "$chunk" || return
-    done
-
-    for chunk in "${vendor_chunks[@]}"; do
-        printf "${BLUE}[•] Flashing %s${RESET}\n" "$chunk"
-        termux-fastboot flash vendor "$chunk" || return
+        termux-fastboot flash super "$chunk" || return
     done
 
     termux-fastboot reboot
