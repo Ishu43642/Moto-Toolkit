@@ -15,6 +15,35 @@ MOTO_URL="https://motorola-global-portal.custhelp.com/app/standalone/bootloader/
 
 clear
 
+# ================= SPINNER =================
+_SPINNER_PID=""
+
+spinner_start() {
+    local msg="$1"
+    local spin='|/-\'
+    local i=0
+
+    printf "${BLUE}%s ${RESET}" "$msg"
+
+    (
+        while true; do
+            i=$(( (i + 1) % 4 ))
+            printf "\b${CYAN}%c${RESET}" "${spin:$i:1}"
+            sleep 0.1
+        done
+    ) &
+    _SPINNER_PID=$!
+}
+
+spinner_stop() {
+    if [ -n "$_SPINNER_PID" ]; then
+        kill "$_SPINNER_PID" 2>/dev/null
+        wait "$_SPINNER_PID" 2>/dev/null
+        _SPINNER_PID=""
+        printf "\b \n"
+    fi
+}
+
 # ============== DYNAMIC BOX ===============
 draw_box() {
     local text="$1"
@@ -46,53 +75,84 @@ printf "${BLUE}[•] Checking termux-adb & termux-fastboot...${RESET}\n"
 
 if ! command -v termux-adb >/dev/null 2>&1 || ! command -v termux-fastboot >/dev/null 2>&1; then
     printf "${YELLOW}[!] termux-adb / termux-fastboot not found${RESET}\n"
-    printf "${BLUE}[•] Installing android-tools...${RESET}\n"
 
     if [ -f "installadb.sh" ]; then
+        printf "${BLUE}[•] Running installadb.sh...${RESET}\n"
         bash installadb.sh
     fi
 
+    printf "${BLUE}[•] Installing android-tools...${RESET}\n"
     pkg install -y android-tools
 fi
 
 command -v termux-adb >/dev/null 2>&1 || {
     printf "${RED}[✘] termux-adb still missing${RESET}\n"
+    printf "${YELLOW}[!] Please run installadb.sh manually${RESET}\n"
+   sleep 1.0
+    clear
     exit 1
 }
 
 command -v termux-fastboot >/dev/null 2>&1 || {
     printf "${RED}[✘] termux-fastboot still missing${RESET}\n"
-    exit 1
+    sleep 1.0
+    clear
+     exit 1
 }
 
 printf "${GREEN}[✔] termux-adb & termux-fastboot ready${RESET}\n"
 
-# ============ COMMON CHECKS ===============
-adb_check() {
-    termux-adb get-state 1>/dev/null 2>&1 || {
-        printf "${RED}[✘] No ADB device detected${RESET}\n"
-        sleep 0.5
-        clear
-        return 1
-    }
-}
+# ==================================================
+# ============ FASTBOOT CHECK (STABLE) ==============
+# ==================================================
 
 fastboot_check() {
-    termux-fastboot devices | grep -q . || {
-        printf "${RED}[✘] No fastboot device detected${RESET}\n"
-       sleep 0.5
-        clear
-        return 1
-    }
+    local retries=5
+    local delay=1
+    local count=1
+
+    while [ $count -le $retries ]; do
+        spinner_start "Scanning fastboot device (Attempt $count/$retries)"
+
+        # OTG stability nudge
+        termux-usb -l >/dev/null 2>&1
+        ls /dev/bus/usb >/dev/null 2>&1
+
+        DEVICE=$(termux-fastboot devices | grep -m1 .)
+
+        spinner_stop
+
+        if [ -n "$DEVICE" ]; then
+            printf "${GREEN}[✔] Fastboot device detected${RESET}\n"
+            printf "${CYAN}%s${RESET}\n" "$DEVICE"
+            return 0
+        fi
+
+        printf "${YELLOW}[!] Device not found, retrying...${RESET}\n"
+        sleep $delay
+        count=$((count + 1))
+    done
+
+    printf "\n${RED}[✘] Fastboot device not detected${RESET}\n"
+    printf "${PURPLE}[⚠] Please check:${RESET}\n"
+    printf "  • OTG adapter\n"
+    printf "  • USB DATA cable\n"
+    printf "  • Device in FASTBOOT mode\n"
+    printf "  • Reconnect cable and retry\n\n"
+    sleep 1.0
+    clear
+    return 1
 }
 
-# ============ XML FLASH ===================
+# ================= XML FLASH =================
 flash_from_xml() {
     fastboot_check || return
     read -p "Enter firmware folder path: " FW
     [ ! -f "$FW/flashfile.xml" ] && {
         printf "${RED}[✘] flashfile.xml not found${RESET}\n"
-        return
+       sleep 1.0
+        clear
+         return
     }
 
     cd "$FW" || return
@@ -109,105 +169,150 @@ flash_from_xml() {
     printf "${GREEN}[✔] XML flashing completed${RESET}\n"
 }
 
-# ============ ONE CLICK UNBRICK ===========
+# ================= UNBRICK ==================
 unbrick_mode() {
     fastboot_check || return
+
     read -p "Enter firmware folder path: " FW
     [ ! -d "$FW" ] && {
         printf "${RED}[✘] Invalid firmware path${RESET}\n"
+        sleep 1.0
+        clear
         return
     }
 
     cd "$FW" || return
     draw_box "ONE CLICK UNBRICK"
 
+    # ---------- detect images ----------
+    IMG_FOUND=0
+
+    for f in *.img *.img_sparsechunk.*; do
+        [ -f "$f" ] && IMG_FOUND=1 && break
+    done
+
+    if [ "$IMG_FOUND" -eq 0 ]; then
+        printf "${RED}[✘] No firmware .img files found in folder${RESET}\n"
+        printf "${YELLOW}[!] Please select correct firmware directory${RESET}\n"
+        printf "${YELLOW}[!] Example: boot.img, system.img_sparsechunk.*${RESET}\n"
+       sleep 1.0
+        clear
+       return
+    fi
+
+    # ---------- flash critical partitions ----------
     for part in boot dtbo vbmeta recovery; do
-        for img in $part.img*; do
-            [ -f "$img" ] && termux-fastboot flash "$part" "$img"
+        shopt -s nullglob
+        imgs=($part.img*)
+        shopt -u nullglob
+
+        if [ ${#imgs[@]} -eq 0 ]; then
+            printf "${YELLOW}[!] %s image not found, skipping${RESET}\n" "$part"
+            continue
+        fi
+
+        for img in "${imgs[@]}"; do
+            printf "${BLUE}[•] Flashing %s${RESET}\n" "$img"
+            termux-fastboot flash "$part" "$img" || return
         done
     done
 
-    for chunk in system.img_sparsechunk.* vendor.img_sparsechunk.*; do
-        [ -f "$chunk" ] && termux-fastboot flash "${chunk%%.*}" "$chunk"
+    # ---------- flash sparsechunks ----------
+    shopt -s nullglob
+    system_chunks=(system.img_sparsechunk.*)
+    vendor_chunks=(vendor.img_sparsechunk.*)
+    shopt -u nullglob
+
+    if [ ${#system_chunks[@]} -eq 0 ] && [ ${#vendor_chunks[@]} -eq 0 ]; then
+        printf "${RED}[✘] No system/vendor sparsechunks found${RESET}\n"
+        printf "${YELLOW}[!] Incomplete firmware package${RESET}\n"
+         sleep 1.0
+         clear
+         return
+    fi
+
+    for chunk in "${system_chunks[@]}"; do
+        printf "${BLUE}[•] Flashing %s${RESET}\n" "$chunk"
+        termux-fastboot flash system "$chunk" || return
+    done
+
+    for chunk in "${vendor_chunks[@]}"; do
+        printf "${BLUE}[•] Flashing %s${RESET}\n" "$chunk"
+        termux-fastboot flash vendor "$chunk" || return
     done
 
     termux-fastboot reboot
-    printf "${GREEN}[✔] Unbrick completed${RESET}\n"
+    printf "${GREEN}[✔] Unbrick completed successfully${RESET}\n"
 }
-
-# =========================================================
-# ============ OPTION 3 : BOOTLOADER UNLOCK ================
-# =========================================================
-
-check_device() {
-    printf "${BLUE}[•] Scanning fastboot device...${RESET}\n"
-    DEVICE=$(termux-fastboot devices | head -n 1)
-    [ -z "$DEVICE" ] && {
-        printf "${RED}[✘] No fastboot device detected${RESET}\n"
-        sleep 0.5
-        clear
-        return 1
-    }
-    printf "${GREEN}[✔] Device detected:${RESET}\n${CYAN}%s${RESET}\n" "$DEVICE"
-}
-
+# ================= UNLOCK ===================
 open_website() {
-    if command -v termux-open-url >/dev/null 2>&1; then
-        termux-open-url "$MOTO_URL"
-    elif command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$MOTO_URL"
-    else
-        printf "%s\n" "$MOTO_URL"
-    fi
+    command -v termux-open-url >/dev/null && termux-open-url "$MOTO_URL" || echo "$MOTO_URL"
 }
 
 unlock_with_key() {
-    check_device || return
-    printf "${PURPLE}➤ Enter UNLOCK KEY: ${RESET}"
-    read UNLOCK_KEY
+    fastboot_check || return
+    read -p "Enter UNLOCK KEY: " UNLOCK_KEY
     [ -z "$UNLOCK_KEY" ] && {
         printf "${RED}[✘] Unlock key empty${RESET}\n"
-        return
+       sleep 1.0
+       clear 
+      return
     }
     termux-fastboot oem unlock "$UNLOCK_KEY"
     printf "${GREEN}[✔] Unlock command sent${RESET}\n"
+
 }
 
 get_unlock_data() {
-    check_device || return
-    RAW_DATA=$(termux-fastboot oem get_unlock_data 2>&1)
+    fastboot_check || return
 
-    UNLOCK_STRING=$(echo "$RAW_DATA" \
-        | grep -i "unlock data" \
-        | sed 's/(bootloader)//g;s/INFO//g' \
-        | tr -d ' \r\n')
+    RAW_DATA=$(termux-fastboot oem get_unlock_data 2>&1)
+    UNLOCK_STRING=$(echo "$RAW_DATA" | sed 's/(bootloader)//g;s/INFO//g' | tr -d ' \r\n')
 
     [ -z "$UNLOCK_STRING" ] && {
         printf "${RED}[✘] Failed to get unlock data${RESET}\n"
-        return
+       sleep 1.0
+      clear 
+      return
     }
 
     draw_box "COPY THIS UNLOCK DATA"
     printf "${WHITE}%s${RESET}\n\n" "$UNLOCK_STRING"
 
+    while true; do
     read -p "Open Motorola website now? (yes/no): " OP
-    [[ "$OP" =~ ^(y|Y|yes)$ ]] && open_website
+    case "$OP" in
+        y|Y|yes|YES)
+            open_website
+            break
+            ;;
+        n|N|no|NO)
+            printf "${YELLOW}[•] Returning to main menu...${RESET}\n"
+            sleep 1.0
+            clear
+            return
+            ;;
+        *)
+            printf "${RED}[✘] Please enter yes or no${RESET}\n"
+            ;;
+    esac
+done
 
-    read -p "Press ENTER after receiving unlock key..."
-    unlock_with_key
+read -p "Press ENTER after receiving unlock key..."
+unlock_with_key
 }
 
 bootloader_unlock_menu() {
     fastboot_check || return
     read -p "Do you already have an unlock key? (yes/no): " HAS_KEY
     case "$HAS_KEY" in
-        y|Y|yes|YES) unlock_with_key ;;
-        n|N|no|NO) get_unlock_data ;;
+        y|Y|yes) unlock_with_key ;;
+        n|N|no) get_unlock_data ;;
         *) printf "${RED}Invalid input${RESET}\n" ;;
     esac
 }
 
-# ================== MAIN MENU ==================
+# ================= MAIN MENU =================
 while true; do
     echo
     draw_box "MAIN MENU"
@@ -217,8 +322,8 @@ while true; do
 3) Bootloader Unlock
 0) Exit
 ${RESET}"
-     draw_box "Please Select your option"
-    printf "${CYAN}Enter option: ${RESET}"
+    draw_box "Please Select your option"
+  printf "${CYAN}Enter option: ${RESET}"
     read opt
 
     case "$opt" in
