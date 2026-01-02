@@ -1,7 +1,7 @@
 <img align="right" src="Moto.jpg" width="350" alt="Firmwere Content Extracter">
 
 # Moto-Toolkit
-Flash , unlock bootloader, hard-brick fix without pc 
+Flash XML firmware, unlock bootloader, Unbrick device without pc 
 
 
 # installation :- 
@@ -35,10 +35,10 @@ chmod +x moto-toolkit.sh
 ```
 
 # Tool Feature 
-1. Moto Bootloader Unlock 
+1. 🔓 Moto Bootloader Unlock 
 
-2. Flash motorola firmware 
+2. ⬇️ Flash motorola XML firmware 
 
-3. one click hard-brick fix
+3. 📴 one click unbrick device
 
-4. No need Pc Fix & unlock your device without pc 
+4. 🚫 No need Pc Fix & unlock your device without pc 
