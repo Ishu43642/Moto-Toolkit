@@ -147,28 +147,66 @@ fastboot_check() {
 # ================= XML FLASH =================
 flash_from_xml() {
     fastboot_check || return
+
     read -p "Enter firmware folder path: " FW
     [ ! -f "$FW/flashfile.xml" ] && {
         printf "${RED}[✘] flashfile.xml not found${RESET}\n"
-       sleep 1.0
-        clear
-         return
+        return
     }
 
     cd "$FW" || return
     draw_box "XML FLASHING STARTED"
-    printf "${YELLOW}⚠ Do NOT disconnect device${RESET}\n"
+    printf "${YELLOW}⚠ Do NOT disconnect device${RESET}\n\n"
 
-    grep -E "<(flash|erase|reboot)" flashfile.xml | while read -r line; do
-        CMD=$(echo "$line" | sed -n 's/.*command="\([^"]*\)".*/\1/p')
-        [ -z "$CMD" ] && continue
-        printf "${BLUE}[•] termux-fastboot %s${RESET}\n" "$CMD"
-        termux-fastboot $CMD || return
-    done
+    STEP_COUNT=0
 
-    printf "${GREEN}[✔] XML flashing completed${RESET}\n"
+    while read -r line; do
+        op=$(echo "$line" | sed -n 's/.*operation="\([^"]*\)".*/\1/p')
+        part=$(echo "$line" | sed -n 's/.*partition="\([^"]*\)".*/\1/p')
+        file=$(echo "$line" | sed -n 's/.*filename="\([^"]*\)".*/\1/p')
+        var=$(echo "$line" | sed -n 's/.*var="\([^"]*\)".*/\1/p')
+
+        case "$op" in
+            flash)
+                printf "${BLUE}[•] fastboot flash %s %s${RESET}\n" "$part" "$file"
+                termux-fastboot flash "$part" "$file" || return
+                ;;
+            erase)
+                printf "${BLUE}[•] fastboot erase %s${RESET}\n" "$part"
+                termux-fastboot erase "$part" || return
+                ;;
+            reboot)
+                printf "${BLUE}[•] fastboot reboot${RESET}\n"
+                termux-fastboot reboot || return
+                ;;
+            reboot-bootloader)
+                printf "${BLUE}[•] fastboot reboot-bootloader${RESET}\n"
+                termux-fastboot reboot-bootloader || return
+                ;;
+            oem)
+                printf "${BLUE}[•] fastboot oem %s${RESET}\n" "$var"
+                termux-fastboot oem $var || return
+                ;;
+            getvar)
+                printf "${BLUE}[•] fastboot getvar %s${RESET}\n" "$var"
+                termux-fastboot getvar "$var"
+                ;;
+            *)
+                printf "${YELLOW}[!] Unknown operation: %s${RESET}\n" "$op"
+                ;;
+        esac
+
+        STEP_COUNT=$((STEP_COUNT + 1))
+
+    done < <(grep '<step' flashfile.xml)
+
+    if [ "$STEP_COUNT" -eq 0 ]; then
+        printf "${RED}[✘] No XML steps executed${RESET}\n"
+        return
+    fi
+
+    printf "\n${GREEN}[✔] XML flashing completed successfully${RESET}\n"
 }
-
 # ================= UNBRICK ==================
 unbrick_mode() {
     fastboot_check || return
