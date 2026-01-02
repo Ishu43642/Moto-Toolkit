@@ -1,2 +1,44 @@
+<img align="right" src="Moto.jpg" width="350" alt="Firmwere Content Extracter">
+
 # Moto-Toolkit
-Flash , unlock bootloader, hard rick fix without pc 
+Flash , unlock bootloader, hard-brick fix without pc 
+
+
+# installation :- 
+
+```Install``` [termux](https://f-droid.org/repo/com.termux_1022.apk)
+```apk```
+```console
+yes | pkg update && upgrade
+```
+```console
+yes | pkg install git
+```
+
+# clone tool to termux :-
+
+```console
+git clone https://github.com/Ishu43642/Moto-Toolkit.git
+```
+
+```console
+cd Moto-Toolkit
+```
+```console
+chmod +x moto-toolkit.sh
+```
+
+# Run Tool 
+
+```console
+./moto-toolkit.sh
+```
+
+# Tool Feature 
+1. Moto Bootloader Unlock 
+
+2. Flash motorola firmware 
+
+3. one click hard-brick fix
+
+4. No need Pc Fix & unlock your device without pc 
