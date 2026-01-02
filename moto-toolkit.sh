@@ -30,12 +30,12 @@ draw_box() {
     local l=$(( (width - len) / 2 ))
     local r=$(( width - len - l ))
 
-    printf "${CYAN}${BOLD}┏"; printf '━%.0s' $(seq 1 "$width"); printf "┓${RESET}\n"
-    printf "${CYAN}${BOLD}┃${RESET}%*s${WHITE}${BOLD}%s${RESET}%*s${CYAN}${BOLD}┃${RESET}\n" "$l" "" "$text" "$r" ""
-    printf "${CYAN}${BOLD}┗"; printf '━%.0s' $(seq 1 "$width"); printf "┛${RESET}\n"
+    printf "${PURPLE}${BOLD}┏"; printf '━%.0s' $(seq 1 "$width"); printf "┓${RESET}\n"
+    printf "${PURPLE}${BOLD}┃${RESET}%*s${YELLOW}${BOLD}%s${RESET}%*s${PURPLE}${BOLD}┃${RESET}\n" "$l" "" "$text" "$r" ""
+    printf "${PURPLE}${BOLD}┗"; printf '━%.0s' $(seq 1 "$width"); printf "┛${RESET}\n"
 }
 
-draw_box "Motorola Flashing Toolkit"
+draw_box "Motorola Toolkit By RepairA2Z"
 echo
 
 # ==================================================
@@ -71,6 +71,8 @@ printf "${GREEN}[✔] termux-adb & termux-fastboot ready${RESET}\n"
 adb_check() {
     termux-adb get-state 1>/dev/null 2>&1 || {
         printf "${RED}[✘] No ADB device detected${RESET}\n"
+        sleep 0.5
+        clear
         return 1
     }
 }
@@ -78,6 +80,8 @@ adb_check() {
 fastboot_check() {
     termux-fastboot devices | grep -q . || {
         printf "${RED}[✘] No fastboot device detected${RESET}\n"
+       sleep 0.5
+        clear
         return 1
     }
 }
@@ -140,6 +144,8 @@ check_device() {
     DEVICE=$(termux-fastboot devices | head -n 1)
     [ -z "$DEVICE" ] && {
         printf "${RED}[✘] No fastboot device detected${RESET}\n"
+        sleep 0.5
+        clear
         return 1
     }
     printf "${GREEN}[✔] Device detected:${RESET}\n${CYAN}%s${RESET}\n" "$DEVICE"
@@ -205,13 +211,14 @@ bootloader_unlock_menu() {
 while true; do
     echo
     draw_box "MAIN MENU"
-    echo -e "${CYAN}
+    echo -e "${GREEN}
 1) XML Based Full Flash
 2) One-Click Unbrick Mode
 3) Bootloader Unlock
 0) Exit
 ${RESET}"
-    printf "${PURPLE}Select option: ${RESET}"
+     draw_box "Please Select your option"
+    printf "${CYAN}Enter option: ${RESET}"
     read opt
 
     case "$opt" in
