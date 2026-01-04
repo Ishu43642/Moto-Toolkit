@@ -147,66 +147,28 @@ fastboot_check() {
 # ================= XML FLASH =================
 flash_from_xml() {
     fastboot_check || return
-
     read -p "Enter firmware folder path: " FW
     [ ! -f "$FW/flashfile.xml" ] && {
         printf "${RED}[✘] flashfile.xml not found${RESET}\n"
-        return
+       sleep 1.0
+        clear
+         return
     }
 
     cd "$FW" || return
     draw_box "XML FLASHING STARTED"
-    printf "${YELLOW}⚠ Do NOT disconnect device${RESET}\n\n"
+    printf "${YELLOW}⚠ Do NOT disconnect device${RESET}\n"
 
-    STEP_COUNT=0
+    grep -E "<(flash|erase|reboot)" flashfile.xml | while read -r line; do
+        CMD=$(echo "$line" | sed -n 's/.*command="\([^"]*\)".*/\1/p')
+        [ -z "$CMD" ] && continue
+        printf "${BLUE}[•] termux-fastboot %s${RESET}\n" "$CMD"
+        termux-fastboot $CMD || return
+    done
 
-    while read -r line; do
-        op=$(echo "$line" | sed -n 's/.*operation="\([^"]*\)".*/\1/p')
-        part=$(echo "$line" | sed -n 's/.*partition="\([^"]*\)".*/\1/p')
-        file=$(echo "$line" | sed -n 's/.*filename="\([^"]*\)".*/\1/p')
-        var=$(echo "$line" | sed -n 's/.*var="\([^"]*\)".*/\1/p')
-
-        case "$op" in
-            flash)
-                printf "${BLUE}[•] fastboot flash %s %s${RESET}\n" "$part" "$file"
-                termux-fastboot flash "$part" "$file" || return
-                ;;
-            erase)
-                printf "${BLUE}[•] fastboot erase %s${RESET}\n" "$part"
-                termux-fastboot erase "$part" || return
-                ;;
-            reboot)
-                printf "${BLUE}[•] fastboot reboot${RESET}\n"
-                termux-fastboot reboot || return
-                ;;
-            reboot-bootloader)
-                printf "${BLUE}[•] fastboot reboot-bootloader${RESET}\n"
-                termux-fastboot reboot-bootloader || return
-                ;;
-            oem)
-                printf "${BLUE}[•] fastboot oem %s${RESET}\n" "$var"
-                termux-fastboot oem $var || return
-                ;;
-            getvar)
-                printf "${BLUE}[•] fastboot getvar %s${RESET}\n" "$var"
-                termux-fastboot getvar "$var"
-                ;;
-            *)
-                printf "${YELLOW}[!] Unknown operation: %s${RESET}\n" "$op"
-                ;;
-        esac
-
-        STEP_COUNT=$((STEP_COUNT + 1))
-
-    done < <(grep '<step' flashfile.xml)
-
-    if [ "$STEP_COUNT" -eq 0 ]; then
-        printf "${RED}[✘] No XML steps executed${RESET}\n"
-        return
-    fi
-
-    printf "\n${GREEN}[✔] XML flashing completed successfully${RESET}\n"
+    printf "${GREEN}[✔] XML flashing completed${RESET}\n"
 }
+
 # ================= UNBRICK ==================
 unbrick_mode() {
     fastboot_check || return
@@ -277,6 +239,36 @@ unlock_with_key() {
 
 }
 
+confirm_unlock() {
+    draw_box "⚠️  BOOTLOADER UNLOCK WARNING"
+    echo -e "${RED}
+📁 This will ERASE all user data
+🚫 This action is IRREVERSIBLE
+📵 Warranty may be void
+${RESET}"
+
+    read -p "Type YES to continue or NO to cancel: " CONFIRM
+    case "$CONFIRM" in
+        YES|yes) return 0 ;;
+        *) 
+            printf "${YELLOW}[•] Unlock cancelled${RESET}\n"
+            sleep 1
+            clear
+            return 1
+            ;;
+    esac
+}
+
+detect_unlock_method() {
+    VARS=$(termux-fastboot getvar all 2>&1)
+
+    if echo "$VARS" | grep -qi "flashing_unlocked"; then
+        echo "flashing"
+    else
+        echo "oem"
+    fi
+}
+
 get_unlock_data() {
     fastboot_check || return
 
@@ -318,11 +310,34 @@ unlock_with_key
 
 bootloader_unlock_menu() {
     fastboot_check || return
+
+    METHOD=$(detect_unlock_method)
+
+    confirm_unlock || return
+
+    # If flashing unlock is supported, unlock directly
+    if [ "$METHOD" = "flashing" ]; then
+        printf "${BLUE}[•] Unlocking bootloader...${RESET}\n"
+        termux-fastboot flashing unlock 2>/dev/null || true
+        termux-fastboot flashing unlock_critical 2>/dev/null || true
+
+        if termux-fastboot getvar unlocked 2>&1 | grep -qi "yes"; then
+            printf "${GREEN}[✔] Bootloader unlocked${RESET}\n"
+            return
+        fi
+
+        printf "${RED}[✘] Flashing unlock failed${RESET}\n"
+        return
+    fi
+
+    # Classic Motorola OEM unlock flow
     read -p "Do you already have an unlock key? (yes/no): " HAS_KEY
     case "$HAS_KEY" in
         y|Y|yes) unlock_with_key ;;
         n|N|no) get_unlock_data ;;
-        *) printf "${RED}Invalid input${RESET}\n" ;;
+        *)
+            printf "${RED}Invalid input${RESET}\n"
+            ;;
     esac
 }
 
