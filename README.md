@@ -34,6 +34,12 @@ chmod +x moto-toolkit.sh
 ./moto-toolkit.sh
 ```
 
+# GUI Mode Use
+
+```console
+./moto-gui.sh
+```
+
 # Tool Feature 
 1. 🔓 Moto Bootloader Unlock 
 
