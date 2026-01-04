@@ -34,7 +34,15 @@ chmod +x moto-toolkit.sh
 ./moto-toolkit.sh
 ```
 
-# GUI Mode Use
+# For GUI Mode Use install This pkg
+
+```console
+pkg install jq
+```
+```console
+pkg install coreutils
+```
+# Run Tool in GUI Mode
 
 ```console
 ./moto-gui.sh
