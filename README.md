@@ -29,7 +29,7 @@ git clone https://github.com/Ishu43642/Moto-Toolkit.git
 cd Moto-Toolkit
 ```
 ```console
-chmod +x moto-toolkit.sh
+chmod +x moto-toolkit.sh && chmod +x moto-gui.sh
 ```
 
 # Run Tool 
