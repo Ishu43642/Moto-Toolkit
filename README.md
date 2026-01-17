@@ -1,4 +1,4 @@
-<img align="right" src="Moto.jpg" width="350" alt="Firmwere Content Extracter">
+<img align="right" src="Moto.jpg" width="350" alt="MOTO TOOLKIT">
 
 # Moto-Toolkit
 Flash XML firmware, unlock bootloader, Unbrick device without pc 
