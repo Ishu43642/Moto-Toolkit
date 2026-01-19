@@ -13,10 +13,10 @@ Flash XML firmware, unlock bootloader, Unbrick device without pc
 
 
 ```console
-yes | pkg update && upgrade
+pkg update && upgrade -y
 ```
 ```console
-yes | pkg install git
+pkg install -y git
 ```
 
 # clone tool to termux :-
@@ -41,10 +41,10 @@ chmod +x moto-toolkit.sh && chmod +x moto-gui.sh
 # For GUI Mode Use install This pkg
 
 ```console
-pkg install jq
+pkg install -y jq
 ```
 ```console
-pkg install coreutils
+pkg install -y coreutils
 ```
 # Run Tool in GUI Mode
 
